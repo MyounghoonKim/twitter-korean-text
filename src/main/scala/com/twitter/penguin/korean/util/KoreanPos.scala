@@ -105,11 +105,14 @@ object KoreanPos extends Enumeration {
   val selfNode = KoreanPosTrie(null, null, ending = None)
 
   protected[korean] def buildTrie(s: String, ending_pos: KoreanPos): List[KoreanPosTrie] = {
+    // println(s"\n\n================== buildTrie == s: $s, ending_pos: $ending_pos ==================")
     def isFinal(rest: String): Boolean = {
       val isNextOptional = rest.foldLeft(true) {
         case (output: Boolean, c: Char) if c == '+' || c == '1' => false
         case (output: Boolean, c: Char) => output
       }
+      // println(s"isNextOptional: $isNextOptional")
+      // println(s"isFinal(rest.length == 0 || isNextOptional): ${rest.length == 0 || isNextOptional}")
       rest.length == 0 || isNextOptional
     }
 
@@ -124,17 +127,60 @@ object KoreanPos extends Enumeration {
     } else {
       ""
     }
-
-    val end: Option[KoreanPos] = if (isFinal(rest)) Some(ending_pos) else None
+    val finalVal = isFinal(rest)
+    // 남은 것 중에 + 나 1 이 없으면 final
+    val end: Option[KoreanPos] = if (finalVal) Some(ending_pos) else None
+    // println(s"pos: $pos, rule: $rule, rest: $rest, isFinal: ${finalVal}, end: $end")
 
     rule match {
       case '+' =>
+        // println("case +")
+        // val ret = List(KoreanPosTrie(pos, selfNode :: buildTrie(rest, ending_pos), end))
+        // println(s"size: ${ret.size}")
+        // ret.map { re =>
+        //   println(s"   ..")
+        //   re.nextTrie.map { r =>
+        //     println(s"    $r")
+        //   }
+        // }
+        // println("----end of case '+'")
         List(KoreanPosTrie(pos, selfNode :: buildTrie(rest, ending_pos), end))
       case '*' =>
+        // println("case *")
+        // val ret = List(KoreanPosTrie(pos, selfNode :: buildTrie(rest, ending_pos), end)) ++ buildTrie(rest, ending_pos)
+        // println(s"size: ${ret.size}")
+        // ret.map { re =>
+        //   println(s"   ..")
+        //   re.nextTrie.map { r =>
+        //     println(s"    $r")
+        //   }
+        // }
+        // println("----end of case '*'")
         List(KoreanPosTrie(pos, selfNode :: buildTrie(rest, ending_pos), end)) ++ buildTrie(rest, ending_pos)
       case '1' =>
+        // println("case 1")
+        // val ret = List(KoreanPosTrie(pos, buildTrie(rest, ending_pos), end))
+        // println(s"size: ${ret.size}")
+        // ret.map { re =>
+        //   println(s"   ..")
+        //   re.nextTrie.map { r =>
+        //     println(s"    $r")
+        //   }
+        // }
+        // println("----end of case '1'")
         List(KoreanPosTrie(pos, buildTrie(rest, ending_pos), end))
       case '0' =>
+        // println("case 0")
+        // // case 1과 유사하나, rest로 buildTrie를 하여 붙임
+        // val ret = List(KoreanPosTrie(pos, buildTrie(rest, ending_pos), end)) ++ buildTrie(rest, ending_pos)
+        // println(s"size: ${ret.size}")
+        // ret.map { re =>
+        //   println(s"   ..")
+        //   re.nextTrie.map { r =>
+        //     println(s"    $r")
+        //   }
+        // }
+        // println("----end of case '0'")
         List(KoreanPosTrie(pos, buildTrie(rest, ending_pos), end)) ++ buildTrie(rest, ending_pos)
     }
   }

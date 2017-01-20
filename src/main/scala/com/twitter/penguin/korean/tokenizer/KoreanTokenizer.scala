@@ -68,7 +68,57 @@ object KoreanTokenizer {
     * v VerbPrefix: 동사 접두어 ('쳐'먹어)
     * s Suffix: 접미사 (~적)
     */
+  private val operatorDesc = "0: / *: 없어도 됨 / 1: must / "
   private val SequenceDefinition = Map(
+    // study
+    // +나 1이 없으면 final
+    // "D0p0" -> Noun // 1 candi, 2 trie
+                                // (Determiner, NounPrefix)
+                                // (NounPrefix)
+    // "D0p0" -> Noun,
+    // "A1" -> Adverb   // 1 candi, 3 trie
+                                // (Determiner, NounPrefix)
+                                // (NounPrefix)
+                                // (Adverb)
+
+    // "D*p0" -> Noun // 1 candi, 2 trie
+                                // (Determiner, NounPrefix)
+                                // (NounPrefix)
+    // "D1p0" -> Noun // 1 candi, 1 trie
+                                // (Determiner, NounPrefix)
+    // "D+p0" -> Noun // 1 candi, 2 trie
+                                // (Determiner, NounPrefix)
+
+    // "D0p*N1" -> Noun, // 1 candi,
+    // "A1" -> Adverb    // 3 trie
+                          // (Determiner, NounPrefix, Noun), (Determiner, Noun)
+                          // (NounPrefix, Noun)
+                          // (Noun)
+                          // (Adverb)
+
+    // "D*p*N1" -> Noun // 1 candi,
+                        // 3 trie
+                          // (Determiner, NounPrefix, Noun), (Determiner, Noun)
+                          // (NounPrefix, Noun)
+                          // (Noun)
+
+    // "D+p*N1" -> Noun // 1 candi,
+                        // 1 trie
+                          // (Determiner, NounPrefix, Noun), (Determiner, Noun)
+
+    // "D0p*N1s0" -> Noun // 1 candi,
+                          // 3 trie
+                            // (Det, NPrefix, N, Suf), (Det, N, Suf)
+                            // (NPrefix, N, Suf)
+                            // (N, Suf)
+
+    // "D0p*N1s0j0" -> Noun // 1 candi,
+                          // 3 trie
+                            // (Det, NPrefix, N, Suf, J), (Det, NPrefix, N, J), (Det, N, Suf, J), (Det, N, J)
+                            // (NPrefix, N, Suf, J), (NPrefix, N, J)
+                            // (N, Suf, J), (N, J)
+
+    // "v*V1r*e0" -> Verb
     // Substantive
     "D0p*N1s0j0" -> Noun,
     // Predicate 초기뻐하다, 와주세요, 초기뻤었고, 추첨하다, 구경하기힘들다, 기뻐하는, 기쁜, 추첨해서, 좋아하다, 걸려있을
@@ -82,21 +132,30 @@ object KoreanTokenizer {
     "j1" -> Josa
   )
   private val koreanPosTrie = KoreanPos.getTrie(SequenceDefinition)
-
   /**
     * Parse Korean text into a sequence of KoreanTokens with custom parameters
     *
     * @param text Input Korean chunk
     * @return sequence of KoreanTokens
     */
-  def tokenize(text: CharSequence,
-      profile: TokenizerProfile = TokenizerProfile.defaultProfile
-  ): Seq[KoreanToken] = {
+  def tokenize(
+        text: CharSequence,
+        profile: TokenizerProfile = TokenizerProfile.defaultProfile,
+        verboseLevel: Int = 0
+      ): Seq[KoreanToken] = {
     try {
       chunk(text).flatMap {
         case token: KoreanToken if token.pos == Korean =>
           // Get the best parse of each chunk
-          val parsed = parseKoreanChunk(token, profile)
+          val parsed = if (verboseLevel == 0) {
+            parseKoreanChunk(token, profile)
+          } else if (verboseLevel == 1) { // 약간 verboseLevel
+            parseKoreanChunkVerbose(token, profile)
+          } else if (verboseLevel == 2) { // 완전 verbose
+            parseKoreanChunkVeryVerbose(token, profile)
+          } else {
+            parseKoreanChunk(token, profile)
+          }
 
           // Collapse sequence of one-char nouns into one unknown noun: (가Noun 회Noun -> 가회Noun*)
           collapseNouns(parsed)
@@ -109,6 +168,7 @@ object KoreanTokenizer {
     }
   }
 
+
   /**
     * Find the best parse using dynamic programming.
     *
@@ -116,8 +176,7 @@ object KoreanTokenizer {
     *              for performance optimization. This method is private and is called only by tokenize.
     * @return The best possible parse.
     */
-  private[this] def parseKoreanChunk(chunk: KoreanToken,
-      profile: TokenizerProfile = TokenizerProfile.defaultProfile): Seq[KoreanToken] = {
+  private[this] def parseKoreanChunk(chunk: KoreanToken, profile: TokenizerProfile = TokenizerProfile.defaultProfile): Seq[KoreanToken] = {
     // Direct match
     // This may produce 하 -> PreEomi
     koreanDictionary.foreach {
@@ -203,6 +262,410 @@ object KoreanTokenizer {
     }
   }
 
+  private[this] def parseKoreanChunkVerbose(chunk: KoreanToken, profile: TokenizerProfile = TokenizerProfile.defaultProfile): Seq[KoreanToken] = {
+    // Direct match
+    // This may produce 하 -> PreEomi
+    println(s"-parseKoreanChunk (${chunk.text})-")
+    koreanDictionary.foreach {
+      case (pos, dict) =>
+        if (dict.contains(chunk.text)) {
+          println("--It's in dictionary")
+          println("--Return this:")
+          println(Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length)))
+          return Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length))
+        }
+    }
+
+    // Buffer for solutionTrees
+    val solutionTrees: mutable.Map[Int, List[CandidateParse]] = new java.util.HashMap[Int, List[CandidateParse]]
+
+    // Initial state
+    solutionTrees += 0 -> List(
+      CandidateParse(
+        ParsedChunk(Seq[KoreanToken](), 1, profile),
+        koreanPosTrie, ending = None
+      )
+    )
+    val baseParsedChunk = ParsedChunk(Seq[KoreanToken](), 1, profile)
+    println("-Find N best parses per state")
+    for (
+      end <- 1 to chunk.length;
+      start <- end - 1 to(Seq(end - MAX_TRACE_BACK, 0).max, -1)
+    ) {
+      val word = chunk.text.slice(start, end)
+      println("*********************")
+      println(s"word: $word")
+      println("*********************")
+      val solutionTreesAtStart = solutionTrees(start)
+      val candidates = solutionTreesAtStart.flatMap { solution =>
+        println(s"solution.ending: ${solution.ending}")
+        println("solution.ending이 정의되어 있으면 ")
+        if (solution.ending.isDefined) {
+          println(s"koreanPosTrie.size: ${koreanPosTrie.size}")
+          println("SequenceDefinition으로 만든 Trie를 모두 추가")
+        } else {
+          println("아니면 그냥 현재 solution만 추가")
+        }
+        val possibleTries: Seq[PossibleTrie] = if (solution.ending.isDefined) {
+          solution.curTrie.map(t => PossibleTrie(t, 0)) ++ koreanPosTrie.map(
+            t => PossibleTrie(t, 1))
+        } else {
+          solution.curTrie.map(t => PossibleTrie(t, 0))
+        }
+        println(s"----possibleTries.size: ${possibleTries.size}")
+        println("------ 더할 캔디데이트를 만든다")
+        val candidateParsesToReturn = possibleTries.view.filter { t =>
+          if (t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+                      word.toCharArray)) {
+            println(s"------필터조건: 현재 POS(${t.curTrie.curPos})가 Noun이거나 현재워드($word) is in ${t.curTrie.curPos} 사전")
+          }
+          t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+            word.toCharArray)
+        }.map { case t: PossibleTrie =>
+          println("-------- 아래는 candidate이 되기 위한 조건들")
+          val candidateToAdd =
+            if (t.curTrie.curPos == Noun && !koreanDictionary(Noun).contains(word.toCharArray)) {
+              println(s"---------- Noun인데 사전에 ${word}가 없다")
+              val isWordName: Boolean = isName(word)
+              val isWordKoreanNameVariation: Boolean = isKoreanNameVariation(word)
+
+              val unknown = !isWordName && !isKoreanNumber(word) && !isWordKoreanNameVariation
+              val pos = if (unknown || isWordName || isWordKoreanNameVariation) ProperNoun else Noun
+              val pc = ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length, unknown)),
+                t.words, profile)
+              ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length, unknown)),
+                t.words, profile)
+            } else {
+              println(s"---------- Noun이거나 Noun 사전에 ${word}이/가 있다")
+              val pos = if (t.curTrie.curPos == Noun && properNouns.contains(
+                word.toCharArray)) {
+                println(s"-------------- Noun이고 poperNoun 사전에 ${word}이/가 있으면 pos = ProperNoun")
+                ProperNoun
+              } else {
+                println(s"-------------- Noun이 아니거나 poperNoun 사전에 ${word}이/가 없거나 하면 pos = t.curTrie.curPos(${t.curTrie.curPos})")
+                t.curTrie.curPos
+              }
+              val pc = ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length)), t.words,
+                profile)
+              ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length)), t.words,
+                profile)
+            }
+          val nextTrie = t.curTrie.nextTrie.map { case nt: KoreanPosTrie =>
+            if (nt == selfNode) {
+              t.curTrie
+            } else {
+              nt
+            }
+          }
+          val nextTrieOriginal = t.curTrie.nextTrie.map {
+            case nt: KoreanPosTrie if nt == selfNode => t.curTrie
+            case nt: KoreanPosTrie => nt
+          }
+          assert(nextTrieOriginal == nextTrie)
+          val returnCandidate = CandidateParse(solution.parse ++ candidateToAdd, nextTrie, t.curTrie.ending)
+          returnCandidate
+        }
+        candidateParsesToReturn
+      }
+      println("--end of solutionTreesAtStart로 candidates 생성")
+      println("=====================================================")
+      candidates.sortBy {
+        c => (c.parse.score, c.parse.posTieBreaker)
+      }.flatMap { solution =>
+        println(s"${solution.parse.posNodes}, score: ${solution.parse.score}, tiebreaker: ${solution.parse.posTieBreaker}\n ${solution.parse.scoreSpec.mkString("/")}")
+        Array(solution)
+      }
+      println("=====================================================")
+      println()
+      println()
+
+      val solutionTreesAtEnd = if (solutionTrees.contains(end)) solutionTrees(end) else List()
+      solutionTrees += end -> (solutionTreesAtEnd ++ candidates).sortBy {
+        c => (c.parse.score, c.parse.posTieBreaker)
+      }.take(TOP_N_PER_STATE)
+
+    }
+
+    println("--파이날 솔루션즈")
+    println(s"--solutionTrees size: ${solutionTrees.size}")
+    println(s"chunk.length: ${chunk.length}")
+    solutionTrees.map { s =>
+      println("-------------------------------")
+      s._2.map{ c =>
+        if (!c.parse.posNodes.isEmpty)
+          println(s"score: ${c.parse.score}\n${c.parse.scoreSpec.mkString("/")}, posNodes: ${c.parse.posNodes}")
+      }
+    }
+
+    // println(s"-solutionTrees(chunk.length): ${solutionTrees(chunk.length)}")
+    if (solutionTrees(chunk.length).isEmpty) {
+      // If the chunk is not parseable, treat it as a unknown noun chunk.
+      Seq(KoreanToken(chunk.text, Noun, 0, chunk.length, true))
+    } else {
+      // Return the best parse of the final state
+      // println(s"--chunk.length: ${chunk.length}")
+      // println(s"--solutionTrees(chunk.length): ${solutionTrees(chunk.length)}")
+      solutionTrees(chunk.length).minBy(c => c.parse.score).parse.posNodes
+    }
+  }
+
+  private[this] def parseKoreanChunkVeryVerbose(chunk: KoreanToken, profile: TokenizerProfile = TokenizerProfile.defaultProfile): Seq[KoreanToken] = {
+    // Direct match
+    // This may produce 하 -> PreEomi
+    println(s"-parseKoreanChunk (${chunk.text})-")
+    koreanDictionary.foreach { case (pos, dict) =>
+        if (dict.contains(chunk.text)) {
+          println("--It's in dictionary")
+          println("--Return this:")
+          println(Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length)))
+          return Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length))
+        }
+    }
+
+    // Buffer for solutionTrees
+    val solutionTrees: mutable.Map[Int, List[CandidateParse]] = new java.util.HashMap[Int, List[CandidateParse]]
+
+    // Initial state
+    solutionTrees += 0 -> List(
+      CandidateParse(
+        ParsedChunk(Seq[KoreanToken](), 1, profile),
+        koreanPosTrie, ending = None
+      )
+    )
+    val baseParsedChunk = ParsedChunk(Seq[KoreanToken](), 1, profile)
+    // println("-baseParsedChunk", baseParsedChunk)
+    // println(s"-initial solutionTrees (len: ${solutionTrees.size})")
+
+    // solutionTrees.zipWithIndex.map { s =>
+    //   s._1._2.map { ss =>
+    //     ss.curTrie.map { t =>
+    //       printTrie(t)
+    //     }
+    //   }
+    // }
+
+    // println("-solutionTrees.map { solution =>")
+    // solutionTrees.map { solution =>
+    //   println("--solution.class", solution.getClass)
+    //   println("--solution._1.class", solution._1.getClass)
+    //   println("--solution._2.class", solution._2.getClass)
+    //   println("--solution._1", solution._1)
+    //   println("--candidate_parsers.size", solution._2.size)
+    //   println("----solution._2.map { candidate_parsers =>")
+    //   solution._2.map { candidate_parsers =>
+    //     println("----candidate_parsers.class", candidate_parsers.getClass)
+    //     println("----candidate_parsers.parse.class", candidate_parsers.parse.getClass)
+    //     println(s"----candidate parser's curTrie count: ${candidate_parsers.curTrie.size}")
+    //     println("------candidate_parsers.curTrie.map { z =>")
+    //     candidate_parsers.curTrie.map { z =>
+    //       println("------each curTrie", z )
+    //     }
+    //   }
+    // }
+    // Find N best parses per state
+    println("-Find N best parses per state")
+    for (
+      end <- 1 to chunk.length;
+      start <- end - 1 to(Seq(end - MAX_TRACE_BACK, 0).max, -1)
+    ) {
+      val word = chunk.text.slice(start, end)
+      val solutionTreesAtStart = solutionTrees(start)
+      println("=======================================================")
+      println(s"--solutionTrees size: ${solutionTrees.size}, solutionTreesAtStart.size: ${solutionTreesAtStart.size}, end: $end, start: $start, word: $word")
+      println("=======================================================")
+      solutionTrees.zipWithIndex.map { case(solutionTree, i) =>
+        println(s"------$i -> solutionTree:")
+        solutionTree._2.map { solution =>
+          println(solution.parse.posNodes)
+          solution.curTrie.map { t =>
+            printTrie(t)
+          }
+        }
+      }
+      println(s"--solutionTreesAtStart로(start:$start) candidates 생성")
+      val candidates = solutionTreesAtStart.flatMap { solution =>
+        solution.curTrie.zipWithIndex.map { case (t, i) =>
+          println(s"------$i solution: (${solution.parse.posNodes})")
+          t.nextTrie.map { nt =>
+            printTrie(nt)
+          }
+        }
+        println(s"solution.ending: ${solution.ending}")
+        println("solution.ending이 정의되어 있으면 ")
+        if (solution.ending.isDefined) {
+          println(s"koreanPosTrie.size: ${koreanPosTrie.size}")
+          println("SequenceDefinition으로 만든 Trie를 모두 추가")
+        } else {
+          println("아니면 그냥 현재 solution만 추가")
+        }
+        val possibleTries: Seq[PossibleTrie] = if (solution.ending.isDefined) {
+          solution.curTrie.map(t => PossibleTrie(t, 0)) ++ koreanPosTrie.map(
+            t => PossibleTrie(t, 1))
+        } else {
+          solution.curTrie.map(t => PossibleTrie(t, 0))
+        }
+        println(s"----possibleTries.size: ${possibleTries.size}")
+        possibleTries.map { possiblePos =>
+          printTrie(possiblePos.curTrie)
+        }
+        // println("----possibleTries.zipWithIndex.map { case(t, i) =>")
+        // possibleTries.zipWithIndex.map { case(t, i) =>
+        //   println(s"------each possible Pos ${i+1}/${possibleTries.size}")
+        //   println(s"------$SequenceDefinition")
+        //   println(s"------t.curTrie.curPos: ${t.curTrie.curPos}")
+        //   println(s"------t.curTrie.nextTrie.size: ${t.curTrie.nextTrie.size}")
+        //   println(s"------t.curTrie.nextTrie:")
+        //   println("------t.curTrie.nextTrie.map { nt =>")
+        //   t.curTrie.nextTrie.map { nt =>
+        //     printTrie(nt)
+        //   }
+
+        // println("----possibleTries.view.filter { t => }.map { case t: PossibleTrie =>")
+        println("------ 더할 캔디데이트를 만든다")
+        val candidateParsesToReturn = possibleTries.view.filter { t =>
+          println(s"------필터조건: 현재 POS(${t.curTrie.curPos})가 Noun이거나 현재워드($word) is in ${t.curTrie.curPos} 사전")
+          println(s"filtering...${t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+            word.toCharArray)}")
+          t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+            word.toCharArray)
+        }.map { case t: PossibleTrie =>
+          val candidateToAdd =
+            if (t.curTrie.curPos == Noun && !koreanDictionary(Noun).contains(word.toCharArray)) {
+              println(s"---------- Noun인데 사전에 ${word}가 없다")
+              val isWordName: Boolean = isName(word)
+              val isWordKoreanNameVariation: Boolean = isKoreanNameVariation(word)
+
+              val unknown = !isWordName && !isKoreanNumber(word) && !isWordKoreanNameVariation
+              val pos = if (unknown || isWordName || isWordKoreanNameVariation) ProperNoun else Noun
+              val pc = ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length, unknown)),
+                t.words, profile)
+              println(s"--POS 후보: word: $word, pos: $pos, chunk.offset: ${chunk.offset}, start: ${start}, word.length: ${word.length}, unknown: $unknown, t.words: ${t.words}}")
+              ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length, unknown)),
+                t.words, profile)
+            } else {
+              println(s"---------- Noun이거나 Noun 사전에 ${word}이/가 있다")
+              val pos = if (t.curTrie.curPos == Noun && properNouns.contains(
+                word.toCharArray)) {
+                println(s"-------------- Noun이고 poperNoun 사전에 ${word}이/가 있으면 pos = ProperNoun")
+                ProperNoun
+              } else {
+                println(s"-------------- Noun이 아니거나 poperNoun 사전에 ${word}이/가 없거나 하면 pos = t.curTrie.curPos(${t.curTrie.curPos})")
+                t.curTrie.curPos
+              }
+              val pc = ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length)), t.words,
+                profile)
+              println(s"--POS 후보: word: $word, pos: $pos, chunk.offset: ${chunk.offset}, start: ${start}, word.length: ${word.length}, t.words: ${t.words}, tiebreaker: ${pc.posTieBreaker}")
+              ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length)), t.words,
+                profile)
+            }
+          // println(s"------candidateToAdd: $candidateToAdd")
+          // println(s"------t.curTrie.nextTrie.size: ${t.curTrie.nextTrie.size}")
+          // if (t.curTrie.nextTrie.size != 0) println("------val nextTrie = t.curTrie.nextTrie.map { case nt: KoreanPosTrie =>")
+          val nextTrie = t.curTrie.nextTrie.map { case nt: KoreanPosTrie =>
+            if (nt == selfNode) {
+              println(s"--------if (nt == selfNode) { : ${t.curTrie}")
+              t.curTrie
+            } else {
+              println(s"--------else of <if (nt == selfNode)> { : ${nt}")
+              nt
+            }
+          }
+          val nextTrieOriginal = t.curTrie.nextTrie.map {
+            case nt: KoreanPosTrie if nt == selfNode => t.curTrie
+            case nt: KoreanPosTrie => nt
+          }
+          assert(nextTrieOriginal == nextTrie)
+          println(s"------nextTrie: $nextTrie")
+          println(s"------t.curTrie.ending: ${t.curTrie.ending}")
+          val returnCandidate = CandidateParse(solution.parse ++ candidateToAdd, nextTrie, t.curTrie.ending)
+          for (x <- returnCandidate.curTrie) printTrie(x)
+          returnCandidate
+        }
+        println("------ end of 더할 캔디데이트를 만든다")
+        candidateParsesToReturn
+      }
+      println("--end of solutionTreesAtStart로 candidates 생성")
+      // println(s"--candidates: $candidates")
+      println(s"--candidates.size: ${candidates.size}")
+      println("최종적으로 추가할 candidates")
+      candidates.sortBy {
+        c => (c.parse.score, c.parse.posTieBreaker)
+      }.flatMap { solution =>
+        println(s"${solution.parse.posNodes}, score: ${solution.parse.score}, tiebreaker: ${solution.parse.posTieBreaker}\n ${solution.parse.scoreSpec.mkString("/")}")
+        solution.curTrie.zipWithIndex.map { case (t, i) =>
+          println(s"------$i -> $t")
+        }
+      }
+
+      val solutionTreesAtEnd = if (solutionTrees.contains(end)) solutionTrees(end) else List()
+      println(s"--solutionTreesAtEnd(end: $end)")
+      println(s"--solutionTreesAtEnd.size: ${solutionTreesAtEnd.size}")
+      // println(s"--solutionTreesAtEnd: $solutionTreesAtEnd")
+      solutionTrees += end -> (solutionTreesAtEnd ++ candidates).sortBy {
+        c => (c.parse.score, c.parse.posTieBreaker)
+      }.take(TOP_N_PER_STATE)
+
+      println("기존 솔루션에다가 solutionTreesAtEnd ++ candidates를 더함")
+      println("--solutionTrees candidates added")
+      solutionTrees.zipWithIndex.map { case (solutionTree, i) =>
+        println(s"----$i) solutionTree._1: ${solutionTree._1}")
+        solutionTree._2.zipWithIndex.map { case (solution, j) =>
+          println(s"------$j)")
+          println(s"solution.parse.posNodes: ${solution.parse.posNodes}")
+          if (!solution.parse.posNodes.isEmpty) {
+            println(s"score: ${solution.parse.score}")
+          }
+        }
+      }
+      // println("--solutionTreesAtEnd ++ candidates")
+      // (solutionTreesAtEnd ++ candidates).sortBy {
+      //   c => (c.parse.score, c.parse.posTieBreaker)
+      // }.take(TOP_N_PER_STATE).flatMap { solution =>
+      //   solution.curTrie.zipWithIndex.map { case (t, i) =>
+      //     println(s"------$i -> $t")
+      //   }
+      // }
+
+    }
+
+    println("--파이날 솔루션즈")
+    println(s"--solutionTrees size: ${solutionTrees.size}")
+    println(s"chunk.length: ${chunk.length}")
+    solutionTrees.map { s =>
+      s._2.map{ c =>
+        if (!c.parse.posNodes.isEmpty)
+          println(s"score: ${c.parse.score}\n${c.parse.scoreSpec.mkString("/")}, posNodes: ${c.parse.posNodes}")
+        // println(s"c.parse.score: ${c.parse.score}")
+        // println(s"c.parse.posNodes: ${c.parse.posNodes}")
+      }
+    }
+    // solutionTrees.zipWithIndex.map { case (solution, i) =>
+    //   println(s"----${i+1}th solution ")
+    //   println(s"----solution._2.size: ${solution._2.size}")
+    //   println(s"----solution._2.map { s =>")
+    //   solution._2.map { s =>
+    //     println(s"------s.parse: ${s.parse}")
+    //     println(s"------s.parse.posNodes: ${s.parse.posNodes}")
+    //     println(s"------s.parse.words: ${s.parse.words}")
+    //     println(s"------s.curTrie.size: ${s.curTrie.size}")
+    //     s.curTrie.map { t =>
+    //       printTrie(t)
+    //     }
+    //   }
+    // }
+
+    // println(s"-solutionTrees(chunk.length): ${solutionTrees(chunk.length)}")
+    if (solutionTrees(chunk.length).isEmpty) {
+      // If the chunk is not parseable, treat it as a unknown noun chunk.
+      Seq(KoreanToken(chunk.text, Noun, 0, chunk.length, true))
+    } else {
+      // Return the best parse of the final state
+      // println(s"--chunk.length: ${chunk.length}")
+      // println(s"--solutionTrees(chunk.length): ${solutionTrees(chunk.length)}")
+      solutionTrees(chunk.length).minBy(c => c.parse.score).parse.posNodes
+    }
+  }
+
   case class KoreanToken(text: String, pos: KoreanPos, offset: Int, length: Int,
       unknown: Boolean = false) {
     override def toString: String = {
@@ -219,4 +682,11 @@ object KoreanTokenizer {
       ending: Option[KoreanPos])
 
   private case class PossibleTrie(curTrie: KoreanPosTrie, words: Int)
+
+  def printTrie(trie: KoreanPosTrie, emptyStr:String=""):Unit = {
+    println(s"$emptyStr curPos: ${trie.curPos}, ending: ${trie.ending}")
+    if (trie.nextTrie != null) trie.nextTrie.map(tr=>printTrie(tr, emptyStr + "  "))
+  }
+
+
 }

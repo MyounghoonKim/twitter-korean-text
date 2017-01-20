@@ -53,6 +53,23 @@ case class ParsedChunk(posNodes: Seq[KoreanToken], words: Int,
       isNounHa * profile.haVerb +
       hasSpaceOutOfGuide * profile.spaceGuidePenalty
 
+
+  lazy val scoreSpec = Array(
+      countTokens * profile.tokenCount,
+      countUnknowns * profile.unknown,
+      words * profile.wordCount,
+      getUnknownCoverage * profile.unknownCoverage,
+      getFreqScore * profile.freq,
+      countPos(Unknown) * profile.unknownPosCount,
+      isExactMatch * profile.exactMatch,
+      isAllNouns * profile.allNoun,
+      isPreferredPattern * profile.preferredPattern,
+      countPos(Determiner) * profile.determinerPosCount,
+      countPos(Exclamation) * profile.exclamationPosCount,
+      isInitialPostPosition * profile.initialPostPosition,
+      isNounHa * profile.haVerb,
+      hasSpaceOutOfGuide * profile.spaceGuidePenalty
+  )
   def countUnknowns = this.posNodes.count { p: KoreanToken => p.unknown }
 
   def countTokens = this.posNodes.size

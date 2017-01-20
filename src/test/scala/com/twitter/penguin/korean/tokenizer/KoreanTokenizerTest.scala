@@ -81,9 +81,15 @@ class KoreanTokenizerTest extends TestBase {
 
   test("ParsedChunk should get correct frequency score") {
     assert(
+      // val parsedChunkWithTwoTokens = ParsedChunk(
+      //   List(KoreanToken("하", Noun, 0, 0), KoreanToken("하", Noun, 0, 0)), 1
+      // )
       parsedChunkWithTwoTokens.getFreqScore === 1.0f
     )
     assert(
+      // val parsedChunkWithCommonNouns = ParsedChunk(
+      //   List(KoreanToken("사람", Noun, 0, 0), KoreanToken("강아지", Noun, 0, 0)), 1
+      // )
       parsedChunkWithCommonNouns.getFreqScore === 0.4544f
     )
   }
@@ -119,6 +125,7 @@ class KoreanTokenizerTest extends TestBase {
   }
 
   test("tokenize should return expected tokens") {
+
     assert(
       tokenize("개루루야") ===
         List(KoreanToken("개", Noun, 0, 1), KoreanToken("루루", ProperNoun, 1, 2), KoreanToken("야", Josa, 3, 1))
@@ -140,6 +147,16 @@ class KoreanTokenizerTest extends TestBase {
           KoreanToken("엄청", Adverb, 0, 2),
           KoreanToken("작아", Adjective, 2, 2), KoreanToken("서", Eomi, 4, 1),
           KoreanToken("귀엽", Adjective, 5, 2), KoreanToken("다", Eomi, 7, 1))
+    )
+
+    assert(
+      tokenize("엄청 작아서 귀엽다") ===
+        List(
+          KoreanToken("엄청", Adverb, 0, 2),
+          KoreanToken(" ", Space, 2, 1),
+          KoreanToken("작아", Adjective, 3, 2), KoreanToken("서", Eomi, 5, 1),
+          KoreanToken(" ", Space, 6, 1),
+          KoreanToken("귀엽", Adjective, 7, 2), KoreanToken("다", Eomi, 9, 1))
     )
 
     assert(
@@ -244,5 +261,16 @@ class KoreanTokenizerTest extends TestBase {
 
     assert(tokenize("뇬뇨뇬뇨뇬뇨뇬뇨츄쵸").mkString(" ") ===
         "뇬뇨(Noun: 0, 2) 뇬뇨(Noun: 2, 2) 뇬뇨(Noun: 4, 2) 뇬뇨(Noun: 6, 2) 츄쵸(Noun: 8, 2)")
+  }
+
+  test("KoreanToken should distinct known and unknown token") {
+    assert(KoreanToken(text="운명", Noun, 0, 2).toString == "운명(Noun: 0, 2)")
+    assert(KoreanToken(text="일겅", Noun, 0, 2, true).toString == "일겅*(Noun: 0, 2)")
+  }
+
+  test("KoreanToken should copy with changed POS") {
+    val destination = KoreanToken(text="운명", Noun, 0, 2)
+    assert(destination.toString == "운명(Noun: 0, 2)")
+    assert(destination.copyWithNewPos(pos=Verb).toString == "운명(Verb: 0, 2)")
   }
 }
