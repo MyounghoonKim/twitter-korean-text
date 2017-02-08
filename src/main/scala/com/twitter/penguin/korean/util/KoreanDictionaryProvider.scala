@@ -27,6 +27,8 @@ import com.twitter.penguin.korean.util.KoreanPos._
 import scala.collection.JavaConversions._
 import scala.io.Source
 
+import com._
+
 /**
  * Provides a singleton Korean dictionary
  */
@@ -84,6 +86,14 @@ object KoreanDictionaryProvider {
     set
   }
 
+  protected[korean] def readWordsFromSeq(filenames: Seq[String]): CharArraySet = {
+    val set = newCharArraySet
+    filenames.foreach(
+      filename => readFileByLineFromResources(filename).foreach(set.add)
+    )
+    set
+  }
+
   protected[korean] def readFileByLineFromResources(filename: String): Iterator[String] = {
     readStreamByLine(
       if (filename.endsWith(".gz")) {
@@ -117,6 +127,28 @@ object KoreanDictionaryProvider {
       "noun/foreign.txt", "noun/geolocations.txt", "noun/profane.txt",
       "substantives/given_names.txt", "noun/kpop.txt", "noun/bible.txt",
       "noun/pokemon.txt", "noun/congress.txt", "noun/wikipedia_title_nouns.txt"
+    )
+    map += Verb -> conjugatePredicatesToCharArraySet(readWordsAsSet("verb/verb.txt"))
+    map += Adjective -> conjugatePredicatesToCharArraySet(readWordsAsSet("adjective/adjective.txt"), isAdjective = true)
+    map += Adverb -> readWords("adverb/adverb.txt")
+    map += Determiner -> readWords("auxiliary/determiner.txt")
+    map += Exclamation -> readWords("auxiliary/exclamation.txt")
+    map += Josa -> readWords("josa/josa.txt")
+    map += Eomi -> readWords("verb/eomi.txt")
+    map += PreEomi -> readWords("verb/pre_eomi.txt")
+    map += Conjunction -> readWords("auxiliary/conjunctions.txt")
+    map += NounPrefix -> readWords("substantives/noun_prefix.txt")
+    map += VerbPrefix -> readWords("verb/verb_prefix.txt")
+    map += Suffix -> readWords("substantives/suffix.txt")
+    map
+  }
+
+  def getKoreanDictionary(config: Config) = {
+    val map: collection.mutable.Map[KoreanPos, CharArraySet] =
+      new java.util.HashMap[KoreanPos, CharArraySet]
+
+    map += Noun -> readWordsFromSeq(
+      config.nounDictFiles
     )
     map += Verb -> conjugatePredicatesToCharArraySet(readWordsAsSet("verb/verb.txt"))
     map += Adjective -> conjugatePredicatesToCharArraySet(readWordsAsSet("adjective/adjective.txt"), isAdjective = true)

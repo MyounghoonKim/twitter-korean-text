@@ -27,6 +27,8 @@ import com.twitter.penguin.korean.util.KoreanSubstantive._
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
+import com._
+
 /**
   * Provides Korean tokenization.
   *
@@ -40,6 +42,9 @@ import scala.collection.mutable
 object KoreanTokenizer {
   private val TOP_N_PER_STATE = 5
   private val MAX_TRACE_BACK = 8
+
+  // 파라미터라이즈되면서 동적으로 값을 세팅해야할 때가 있음
+  private var korDic = koreanDictionary
   /**
     * 0 for optional, 1 for required
     * * for optional repeatable, + for required repeatable
@@ -89,16 +94,71 @@ object KoreanTokenizer {
     * @param text Input Korean chunk
     * @return sequence of KoreanTokens
     */
-  def tokenize(text: CharSequence,
-      profile: TokenizerProfile = TokenizerProfile.defaultProfile
-  ): Seq[KoreanToken] = {
+  def tokenize(text: CharSequence): Seq[KoreanToken] = {
     try {
       chunk(text).flatMap {
         case token: KoreanToken if token.pos == Korean =>
           // Get the best parse of each chunk
+          val profile = TokenizerProfile.defaultProfile
           val parsed = parseKoreanChunk(token, profile)
 
           // Collapse sequence of one-char nouns into one unknown noun: (가Noun 회Noun -> 가회Noun*)
+          collapseNouns(parsed)
+        case token: KoreanToken => Seq(token)
+      }
+    } catch {
+      case e: Exception =>
+        System.err.println(s"Error tokenizing a chunk: $text")
+        throw e
+    }
+  }
+
+  def tokenize(
+      text: CharSequence,
+      profile: TokenizerProfile
+  ): Seq[KoreanToken] = {
+    try {
+      chunk(text).flatMap {
+        case token: KoreanToken if token.pos == Korean =>
+          val parsed = parseKoreanChunk(token, profile)
+          collapseNouns(parsed)
+        case token: KoreanToken => Seq(token)
+      }
+    } catch {
+      case e: Exception =>
+        System.err.println(s"Error tokenizing a chunk: $text")
+        throw e
+    }
+  }
+
+  def tokenize(
+      text: CharSequence,
+      config: Config
+  ): Seq[KoreanToken] = {
+    try {
+      chunk(text).flatMap {
+        case token: KoreanToken if token.pos == Korean =>
+          val profile = TokenizerProfile.defaultProfile
+          val parsed = parseKoreanChunk(token, profile, config)
+          collapseNouns(parsed)
+        case token: KoreanToken => Seq(token)
+      }
+    } catch {
+      case e: Exception =>
+        System.err.println(s"Error tokenizing a chunk: $text")
+        throw e
+    }
+  }
+
+  def tokenize(
+      text: CharSequence,
+      profile: TokenizerProfile,
+      config: Config
+  ): Seq[KoreanToken] = {
+    try {
+      chunk(text).flatMap {
+        case token: KoreanToken if token.pos == Korean =>
+          val parsed = parseKoreanChunk(token, profile, config)
           collapseNouns(parsed)
         case token: KoreanToken => Seq(token)
       }
@@ -116,16 +176,27 @@ object KoreanTokenizer {
     *              for performance optimization. This method is private and is called only by tokenize.
     * @return The best possible parse.
     */
-  private[this] def parseKoreanChunk(chunk: KoreanToken,
-      profile: TokenizerProfile = TokenizerProfile.defaultProfile): Seq[KoreanToken] = {
+  private[this] def parseKoreanChunk(
+      chunk: KoreanToken,
+      profile: TokenizerProfile = TokenizerProfile.defaultProfile,
+      config: Config = (new EmptyConfig())
+    ): Seq[KoreanToken] = {
     // Direct match
     // This may produce 하 -> PreEomi
-    koreanDictionary.foreach {
+
+    if (config.isGood) {
+      korDic = getKoreanDictionary(config)
+    } else {
+      korDic = koreanDictionary
+    }
+
+    korDic.foreach {
       case (pos, dict) =>
         if (dict.contains(chunk.text)) {
           return Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length))
         }
     }
+
 
     // Buffer for solutions
     val solutions: mutable.Map[Int, List[CandidateParse]] = new java.util.HashMap[Int, List[CandidateParse]]
@@ -157,11 +228,11 @@ object KoreanTokenizer {
           }
 
           possiblePoses.view.filter { t =>
-            t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+            t.curTrie.curPos == Noun || korDic(t.curTrie.curPos).contains(
               word.toCharArray)
           }.map { case t: PossibleTrie =>
             val candidateToAdd =
-              if (t.curTrie.curPos == Noun && !koreanDictionary(Noun).contains(word.toCharArray)) {
+              if (t.curTrie.curPos == Noun && !korDic(Noun).contains(word.toCharArray)) {
                 val isWordName: Boolean = isName(word)
                 val isWordKoreanNameVariation: Boolean = isKoreanNameVariation(word)
 

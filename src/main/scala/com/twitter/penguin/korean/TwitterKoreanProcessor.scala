@@ -26,6 +26,8 @@ import com.twitter.penguin.korean.tokenizer.KoreanTokenizer.KoreanToken
 import com.twitter.penguin.korean.tokenizer._
 import com.twitter.penguin.korean.util.{KoreanDictionaryProvider, KoreanPos}
 
+import com._
+
 /**
  * TwitterKoreanTokenizer provides error and slang tolerant Korean tokenization.
  */
@@ -60,6 +62,21 @@ object TwitterKoreanProcessor {
       profile: TokenizerProfile
   ): Seq[KoreanToken] = {
     KoreanTokenizer.tokenize(text, profile)
+  }
+
+  def tokenize(
+      text: CharSequence,
+      config: Config
+  ): Seq[KoreanToken] = {
+    KoreanTokenizer.tokenize(text, config)
+  }
+
+  def tokenize(
+      text: CharSequence,
+      profile: TokenizerProfile,
+      config: Config
+  ): Seq[KoreanToken] = {
+    KoreanTokenizer.tokenize(text, profile, config)
   }
 
   /**

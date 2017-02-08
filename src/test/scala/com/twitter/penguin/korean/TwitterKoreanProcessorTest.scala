@@ -24,6 +24,7 @@ import com.twitter.penguin.korean.TestBase._
 import com.twitter.penguin.korean.TwitterKoreanProcessor._
 import com.twitter.penguin.korean.tokenizer.TokenizerProfile
 import com.twitter.penguin.korean.util.{KoreanPos, KoreanDictionaryProvider}
+import com._
 
 class TwitterKoreanProcessorTest extends TestBase {
   val LOG = Logger.getLogger(getClass.getSimpleName)
@@ -197,5 +198,17 @@ class TwitterKoreanProcessorTest extends TestBase {
     assert(!KoreanDictionaryProvider.koreanDictionary(KoreanPos.Noun).contains("후랴오교"))
     addNounsToDictionary(List("후랴오교"))
     assert(KoreanDictionaryProvider.koreanDictionary(KoreanPos.Noun).contains("후랴오교"))
+  }
+
+  test("Config를 파라미터로 입력 가능") {
+
+    val federer = "페더러 메이저 18회 경축"
+    val noSetup = tokenize(federer)
+    val lolOnlyConfig = tokenize(federer, new LolOnlyConfig())
+    val defaultConfig = tokenize(federer, new DefaultConfig())
+
+    assert(noSetup === defaultConfig)
+    assert(noSetup !== lolOnlyConfig)
+
   }
 }

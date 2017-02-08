@@ -20,8 +20,11 @@ import com.twitter.penguin.korean.TwitterKoreanProcessor
 import com.twitter.penguin.korean.phrase_extractor.KoreanPhraseExtractor.KoreanPhrase
 import com.twitter.penguin.korean.tokenizer.KoreanTokenizer.KoreanToken
 
+import com._
+
 object Runner {
   def main(args: Array[String]) {
+
     args.foreach(println)
     val text = "한국어를 처리하는 예시입니닼ㅋㅋㅋㅋㅋ #한국어"
 
@@ -31,8 +34,18 @@ object Runner {
     // 한국어를 처리하는 예시입니다ㅋㅋ #한국어
 
     // Tokenize
+    println("config 없이")
+    println(TwitterKoreanProcessor.tokenize(normalized))
+    println("\n\n")
+
+    println("lol 명사만 넣고")
+    println(TwitterKoreanProcessor.tokenize(normalized, new LolOnlyConfig()))
+    println("\n\n")
+
     val tokens: Seq[KoreanToken] = TwitterKoreanProcessor.tokenize(normalized)
+    println("원래 꺼")
     println(tokens)
+    println("\n\n")
     // List(한국어(Noun: 0, 3), 를(Josa: 3, 1),  (Space: 4, 1), 처리(Noun: 5, 2), 하는(Verb: 7, 2),  (Space: 9, 1), 예시(Noun: 10, 2), 입니(Adjective: 12, 2), 다(Eomi: 14, 1), ㅋㅋ(KoreanParticle: 15, 2),  (Space: 17, 1), #한국어(Hashtag: 18, 4))
 
     // Stemming
