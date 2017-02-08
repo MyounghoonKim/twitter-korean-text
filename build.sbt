@@ -1,4 +1,4 @@
-name := "Korean Text Processing Utilities SBT"
+name := "KoreanTextUtil"
 
 version := "4.0"
 
