@@ -11,3 +11,6 @@ libraryDependencies ++= Seq(
   "org.scalatest"     %% "scalatest"   % "3.0.0" % "test",
   "junit"             %  "junit"       % "4.12"  % "test"
 )
+
+// http://stackoverflow.com/questions/5864025/sbt-project-for-java-executable-jar
+mainClass in assembly := Some("Runner")
