@@ -247,8 +247,13 @@ class KoreanTokenizerTest extends TestBase {
   }
 
   test("very simple phrases for making analytic doc") {
+    // println("===============================")
+    // println(tokenize("집에 갑니다", makeAnalysisDoc=true))
+    // println("===============================")
+
     println("===============================")
-    println(tokenize("집에 갑니다", makeAnalysisDoc=true))
+    println(tokenize("페더러 우승했다", makeAnalysisDoc=true))
     println("===============================")
+
   }
 }
