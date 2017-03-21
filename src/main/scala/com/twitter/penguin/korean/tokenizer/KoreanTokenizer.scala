@@ -27,6 +27,7 @@ import com.twitter.penguin.korean.util.KoreanSubstantive._
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
+import java.io._
 /**
   * Provides Korean tokenization.
   *
@@ -89,14 +90,22 @@ object KoreanTokenizer {
     * @param text Input Korean chunk
     * @return sequence of KoreanTokens
     */
+
   def tokenize(text: CharSequence,
-      profile: TokenizerProfile = TokenizerProfile.defaultProfile
+      profile: TokenizerProfile = TokenizerProfile.defaultProfile,
+      makeAnalysisDoc: Boolean = false
   ): Seq[KoreanToken] = {
-    try {
+    val pw = new PrintWriter(new File("analysis-result.md" ))
+    val result = try {
       chunk(text).flatMap {
         case token: KoreanToken if token.pos == Korean =>
           // Get the best parse of each chunk
-          val parsed = parseKoreanChunk(token, profile)
+          val parsed = if (makeAnalysisDoc) {
+            parseKoreanChunkWithAnalysisDoc(token, profile, pw)
+          }
+          else {
+            parseKoreanChunk(token, profile)
+          }
 
           // Collapse sequence of one-char nouns into one unknown noun: (가Noun 회Noun -> 가회Noun*)
           collapseNouns(parsed)
@@ -107,6 +116,8 @@ object KoreanTokenizer {
         System.err.println(s"Error tokenizing a chunk: $text")
         throw e
     }
+    pw.close
+    return result
   }
 
   /**
@@ -126,6 +137,99 @@ object KoreanTokenizer {
           return Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length))
         }
     }
+
+    // Buffer for solutions
+    val solutions: mutable.Map[Int, List[CandidateParse]] = new java.util.HashMap[Int, List[CandidateParse]]
+
+    // Initial state
+    solutions += 0 -> List(
+      CandidateParse(
+        ParsedChunk(Seq[KoreanToken](), 1, profile),
+        koreanPosTrie, ending = None
+      )
+    )
+
+    // Find N best parses per state
+    for (
+      end <- 1 to chunk.length;
+      start <- end - 1 to(Seq(end - MAX_TRACE_BACK, 0).max, -1)
+    ) {
+      val word = chunk.text.slice(start, end)
+
+      val curSolutions = solutions(start)
+
+      val candidates = curSolutions.flatMap {
+        solution =>
+          val possiblePoses: Seq[PossibleTrie] = if (solution.ending.isDefined) {
+            solution.curTrie.map(t => PossibleTrie(t, 0)) ++ koreanPosTrie.map(
+              t => PossibleTrie(t, 1))
+          } else {
+            solution.curTrie.map(t => PossibleTrie(t, 0))
+          }
+
+          possiblePoses.view.filter { t =>
+            t.curTrie.curPos == Noun || koreanDictionary(t.curTrie.curPos).contains(
+              word.toCharArray)
+          }.map { case t: PossibleTrie =>
+            val candidateToAdd =
+              if (t.curTrie.curPos == Noun && !koreanDictionary(Noun).contains(word.toCharArray)) {
+                val isWordName: Boolean = isName(word)
+                val isWordKoreanNameVariation: Boolean = isKoreanNameVariation(word)
+
+                val unknown = !isWordName && !isKoreanNumber(word) && !isWordKoreanNameVariation
+                val pos = if (unknown || isWordName || isWordKoreanNameVariation) ProperNoun else Noun
+                ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length, unknown)),
+                  t.words, profile)
+              } else {
+                val pos = if (t.curTrie.curPos == Noun && properNouns.contains(
+                  word.toCharArray)) ProperNoun
+                else t.curTrie.curPos
+                ParsedChunk(Seq(KoreanToken(word, pos, chunk.offset + start, word.length)), t.words,
+                  profile)
+              }
+
+            val nextTrie = t.curTrie.nextTrie.map {
+              case nt: KoreanPosTrie if nt == selfNode => t.curTrie
+              case nt: KoreanPosTrie => nt
+            }
+
+            CandidateParse(solution.parse ++ candidateToAdd, nextTrie, t.curTrie.ending)
+          }
+      }
+
+      val currentSolutions = if (solutions.contains(end)) solutions(end) else List()
+
+      solutions += end -> (currentSolutions ++ candidates).sortBy {
+        c => (c.parse.score, c.parse.posTieBreaker)
+      }.take(TOP_N_PER_STATE)
+    }
+
+
+    if (solutions(chunk.length).isEmpty) {
+      // If the chunk is not parseable, treat it as a unknown noun chunk.
+      Seq(KoreanToken(chunk.text, Noun, 0, chunk.length, true))
+    } else {
+      // Return the best parse of the final state
+      solutions(chunk.length).minBy(c => c.parse.score).parse.posNodes
+    }
+  }
+
+  private[this] def parseKoreanChunkWithAnalysisDoc(chunk: KoreanToken,
+      profile: TokenizerProfile = TokenizerProfile.defaultProfile, pw: PrintWriter): Seq[KoreanToken] = {
+    // Direct match
+    // This may produce 하 -> PreEomi
+    println("# " + chunk.toString)
+    write("# " + chunk.toString)
+    koreanDictionary.foreach {
+      case (pos, dict) =>
+        if (dict.contains(chunk.text)) {
+          return Seq(KoreanToken(chunk.text, pos, chunk.offset, chunk.length))
+        }
+    }
+
+    def write(str: String) = pw.write(str + "\n")
+
+
 
     // Buffer for solutions
     val solutions: mutable.Map[Int, List[CandidateParse]] = new java.util.HashMap[Int, List[CandidateParse]]

@@ -245,4 +245,10 @@ class KoreanTokenizerTest extends TestBase {
     assert(tokenize("뇬뇨뇬뇨뇬뇨뇬뇨츄쵸").mkString(" ") ===
         "뇬뇨(Noun: 0, 2) 뇬뇨(Noun: 2, 2) 뇬뇨(Noun: 4, 2) 뇬뇨(Noun: 6, 2) 츄쵸(Noun: 8, 2)")
   }
+
+  test("very simple phrases for making analytic doc") {
+    println("===============================")
+    println(tokenize("집에 갑니다", makeAnalysisDoc=true))
+    println("===============================")
+  }
 }
