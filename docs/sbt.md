@@ -9,4 +9,4 @@ SBT
         - `$ sbt "runMain Runner"`
 		-	`$ sbt "runMain com.twitter.penguin.korean.qa.BatchGetUnknownNouns ./src/main/resources/com/twitter/penguin/korean/util/example_tweets.txt"`
 		-	`$ sbt "runMain com.twitter.penguin.korean.qa.BatchGetUnknownNouns ./src/main/resources/com/twitter/penguin/korean/util/example_tweets.txt"`
-        - `$ sbt "runMain com.quryon.qa.BatchTokenizeSentences ./src/main/resources/com/quryon/qa/example_sentences.txt"`
+        - `$ sbt "runMain com.quryon.qa.BatchTokenizeSentences ./src/main/resources/com/quryon/qa/input/examples.txt ./src/main/resources/com/quryon/qa/output/examples.txt"`

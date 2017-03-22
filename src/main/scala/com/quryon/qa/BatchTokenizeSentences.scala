@@ -6,7 +6,9 @@ import com.twitter.penguin.korean.TwitterKoreanProcessor
 import com.twitter.penguin.korean.tokenizer.KoreanTokenizer.KoreanToken
 import com.twitter.penguin.korean.util.KoreanPos
 
-import scala.io.Source
+// file input and output
+import scala.io._
+import java.io._
 
 import com.twitter.penguin.korean.qa.BatchTokenizeTweets
 
@@ -20,10 +22,11 @@ object BatchTokenizeSentences {
     println("BatchTokenizeSentences.main()")
     println(args)
 
-    if (args.length != 1) {
-      println("The first arg should be an input file of Korean sentences.")
+    if (args.length != 2) {
+      println("The first arg should be an input file of Korean sentences and the second args should be an output file for parsed result.")
       return
     }
+    val pw = new PrintWriter(new File(args(1)))
     val parseTimesAll = Source.fromFile(args(0)).getLines().foldLeft(List[ParseTime]()) {
       case (l: List[ParseTime], line: String) =>
         val t0 = System.currentTimeMillis()
@@ -32,8 +35,10 @@ object BatchTokenizeSentences {
 
         println()
         println(parsed.map(t => t.text + "/" + t.pos).mkString(" ") + "\n")
+        pw.write(parsed.map(t => t.text + "/" + t.pos).mkString(" ") + "\n")
         ParseTime(t1 - t0, line.trim) :: l
     }
+    pw.close()
 
     val loadingTime = parseTimesAll.last
 
