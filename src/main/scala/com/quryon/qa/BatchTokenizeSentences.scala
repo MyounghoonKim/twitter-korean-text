@@ -2,14 +2,68 @@ package com.quryon.qa
 
 import java.util.logging.{Level, Logger}
 
+import com.twitter.penguin.korean.TwitterKoreanProcessor
+import com.twitter.penguin.korean.tokenizer.KoreanTokenizer.KoreanToken
+import com.twitter.penguin.korean.util.KoreanPos
+
+import scala.io.Source
+
 import com.twitter.penguin.korean.qa.BatchTokenizeTweets
 
 object BatchTokenizeSentences {
-  import BatchTokenizeTweets.{main => bttMain}
+  import BatchTokenizeTweets._
+
+  private val LOG = Logger.getLogger(getClass.getSimpleName)
+
   def main(args: Array[String]) {
     println("===========================================")
     println("BatchTokenizeSentences.main()")
     println(args)
-    bttMain(args)
+
+    if (args.length != 1) {
+      println("The first arg should be an input file of Korean sentences.")
+      return
+    }
+    val parseTimesAll = Source.fromFile(args(0)).getLines().foldLeft(List[ParseTime]()) {
+      case (l: List[ParseTime], line: String) =>
+        val t0 = System.currentTimeMillis()
+        val parsed = TwitterKoreanProcessor.tokenize(line)
+        val t1 = System.currentTimeMillis()
+
+        println()
+        println(parsed.map(t => t.text + "/" + t.pos).mkString(" ") + "\n")
+        ParseTime(t1 - t0, line.trim) :: l
+    }
+
+    val loadingTime = parseTimesAll.last
+
+    LOG.log(Level.INFO, "\n\n\n\nThe first one \"%s\" took %d ms including the loading time.".format(loadingTime.chunk, loadingTime.time))
+
+    val parseTimes = parseTimesAll.init
+
+    val averageSentenceLength = parseTimes.map(_.chunk.length).sum.toDouble / parseTimes.size
+
+    val averageTime = parseTimes.map(_.time).sum.toDouble / parseTimes.size
+    val maxItem = parseTimes.maxBy(_.time)
+
+    LOG.log(Level.INFO, ("Parsed %d items. \n" +
+        "       Total time: %d s \n" +
+        "       Average sentence length: %.2f chars \n" +
+        "       Average time per sentence: %.2f ms \n" +
+        "       Max time: %d ms, %s\n" +
+        "       Parsed result of Max time sentence: %s" +
+        "\n\n\n"
+        ).format(
+          parseTimes.size,
+          parseTimes.map(_.time).sum / 1000,
+          averageSentenceLength,
+          averageTime,
+          maxItem.time,
+          maxItem.chunk,
+          TwitterKoreanProcessor.tokenize(maxItem.chunk).map {
+            case t if t.unknown => t.text.toString + t.pos + "*"
+            case t => t.text + t.pos.toString
+          }.mkString(" ")
+        ))
   }
 }
