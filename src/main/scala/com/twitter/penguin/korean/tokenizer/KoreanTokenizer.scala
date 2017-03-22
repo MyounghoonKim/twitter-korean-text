@@ -28,6 +28,8 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 
 import java.io._
+import sys.process._
+
 /**
   * Provides Korean tokenization.
   *
@@ -821,7 +823,13 @@ object KoreanTokenizer {
         }
         </style><title>analysis-${text}</title><body><article class="markdown-body">
         """
-      val printWriter = new PrintWriter(new File("analysis-" + text + ".html" ))
+
+
+      // val currentTime = System.currentTimeMillis().toString
+      // just for text
+      val currentTime = "123123"
+      s"mkdir -p analysis-results/${currentTime}".!
+      val printWriter = new PrintWriter(new File(s"analysis-results/${currentTime}/" + text + ".html" ))
       printWriter.write(base)
       printWriter.write("")
       printWriter
@@ -978,6 +986,21 @@ object KoreanTokenizer {
       )
     )
 
+    for ((key, trees) <- solutions) {
+      println(key)
+      println(s"==trees.size: ${trees.size}")
+      println(s"==trees.getClass: ${trees.getClass}")
+      for (tree <- trees) {
+        println(s"====tree.getClass:${tree.getClass}")
+        println(s"====tree.ParsedChunk:${tree.parse}")
+        println(s"====tree.curTrie.size:${tree.curTrie.size}")
+      }
+    }
+
+    def printTrie(trie: KoreanPosTrie, emptyStr:String=""):Unit = {
+      println(s"$emptyStr curPos: ${trie.curPos}, ending: ${trie.ending}")
+      if (trie.nextTrie != null) trie.nextTrie.map(tr=>printTrie(tr, emptyStr + "  "))
+    }
     // Find N best parses per state
     for (
       end <- 1 to chunk.length;

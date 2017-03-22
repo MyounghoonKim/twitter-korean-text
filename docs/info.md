@@ -20,3 +20,10 @@ else
     exit $code
 fi;
 ```
+
+## test auto-run
+```shell
+$ sbt
+sbt> ~test:test-only *ClassName*
+fg) sbt> ~test:test-only *KoreanTokenizer*
+```
