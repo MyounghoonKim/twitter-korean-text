@@ -30,12 +30,22 @@ object BatchTokenizeSentences {
     val parseTimesAll = Source.fromFile(args(0)).getLines().foldLeft(List[ParseTime]()) {
       case (l: List[ParseTime], line: String) =>
         val t0 = System.currentTimeMillis()
-        val parsed = TwitterKoreanProcessor.tokenize(line)
+        val normalized = TwitterKoreanProcessor.normalize(line)
+        val parsed = TwitterKoreanProcessor.tokenize(normalized)
         val t1 = System.currentTimeMillis()
 
         println()
-        println(parsed.map(t => t.text + "/" + t.pos).mkString(" ") + "\n")
-        pw.write(parsed.map(t => t.text + "/" + t.pos).mkString(" ") + "\n")
+
+        val to_print = parsed.map { t =>
+          if (t.pos.toString == "Space")
+            ""
+          else
+            t.text + "/" + t.pos
+        }.mkString(" ").replace("  ", " ") + "\n"
+
+
+        println(to_print)
+        pw.write(to_print)
         ParseTime(t1 - t0, line.trim) :: l
     }
     pw.close()
