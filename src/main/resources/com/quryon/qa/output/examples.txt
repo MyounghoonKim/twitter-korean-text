@@ -1,3 +1,0 @@
-페더러/ProperNoun 가/Josa  /Space 35/Number 세/Noun 의/Josa  /Space 나이/Noun 로/Josa  /Space 메이저/Noun  /Space 타이틀/Noun 을/Josa  /Space 획득하였/Verb 다/Eomi ./Punctuation
-그/Determiner 란/Noun 토리노/ProperNoun ,/Punctuation  /Space 완전/Noun  /Space 역대/Noun 급/Suffix
-탄핵/ProperNoun 기각/Noun 이/Josa  /Space 무슨/Noun  /Space 각/Noun 이/Suffix 냐/Josa  /Space 탄핵/ProperNoun 기/Noun 가/Josa  /Space 뭐/Noun 여/Josa
